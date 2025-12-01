@@ -15,8 +15,6 @@ __pycache__/
 *.log
 /tmp/
 
-# CSV exports
-*.csv
 
 # IDE
 .vscode/

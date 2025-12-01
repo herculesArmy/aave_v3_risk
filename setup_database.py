@@ -92,6 +92,34 @@ def create_tables():
         )
     """)
 
+    # Create historical_prices table for volatility analysis
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS historical_prices (
+            id SERIAL PRIMARY KEY,
+            symbol VARCHAR(20) NOT NULL,
+            date DATE NOT NULL,
+            close_price DECIMAL(20, 8) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(symbol, date)
+        )
+    """)
+
+    # Create asset_volatility table for storing calculated metrics
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS asset_volatility (
+            symbol VARCHAR(20) PRIMARY KEY,
+            current_price DECIMAL(20, 8),
+            min_price DECIMAL(20, 8),
+            max_price DECIMAL(20, 8),
+            price_range_pct DECIMAL(10, 4),
+            daily_volatility DECIMAL(10, 8),
+            annualized_volatility DECIMAL(10, 8),
+            annualized_volatility_pct DECIMAL(10, 4),
+            days_analyzed INTEGER,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Create indexes for better query performance
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_users_debt
@@ -106,6 +134,16 @@ def create_tables():
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_positions_side
         ON positions(side)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_historical_prices_symbol
+        ON historical_prices(symbol)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_historical_prices_date
+        ON historical_prices(date DESC)
     """)
 
     conn.commit()

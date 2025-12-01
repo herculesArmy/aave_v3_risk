@@ -78,9 +78,11 @@ python3 query_positions.py
 python3 update_prices.py
 ```
 
-## SQL Queries
+## Questions
 
-### Top 1,000 Individual Debt Positions
+### 1. Get the top 1,000 borrow positions on Aave v3 Ethereum main Deployment.
+
+#### Top 1000 borrow positions
 ```sql
 SELECT *
 FROM positions
@@ -88,8 +90,7 @@ WHERE side = 'debt'
 ORDER BY amount_usd DESC
 LIMIT 1000;
 ```
-
-### Top Borrowers by Total Debt
+#### Top 1000 Borrowers users by Total Debt
 ```sql
 SELECT 
     user_address,
@@ -101,13 +102,108 @@ ORDER BY total_debt_usd DESC
 LIMIT 1000;
 ```
 
-### Risky Positions (Health Factor < 1.1)
-```sql
-SELECT *
-FROM users
-WHERE health_factor < 1.1
-ORDER BY total_debt_usd DESC;
+
+### 2. Calculate the volatility of the top 10 supplied assets on Aave. 
+
+#### Explain how the volatility was measured and over which time period. You may use any public data source (e.g., Coingecko, Binance),Our goal is to build a simulation framework to estimate the value at risk of the protocol.
+
+- In this case we use 90 days daily close prices historical data. The reason for this is that I beleive crypto market are in different regime over a long period. So using data point like 365 days might dilute the current regime which seems bearish post 10/10 (while we are more bullish earlier in the year). And 90 days provide enough data point for a Vol estimate. 180 days could work too
+
+#### Top 10 supplied asset
+````sql
+   select symbol, sum(amount_usd) as total_supplied_usd
+   from positions
+   where side = 'collateral'
+   group by 1
+   order by total_supplied_usd DESC
+   limit 10
+````
+- Things to note: All the data we have in the database ignored address that only supplied but does not borrow, this mean the actual top 10 asset lists and number might be slighlt differnet. As my understanding is that the root of our analysis here really pinned on debt and its also make data much smaller to work with. 
+
+#### How daily volatility is calculated?
+
+We use the **standard deviation of log returns** methodology, which is the industry standard for financial volatility estimation.
+
+**Step-by-step process:**
+
+1. **Fetch daily close prices** for 90 days from CoinGecko
+   ```python
+   python3 fetch_historical_prices.py
+   ```
+
+2. **Calculate log returns** for each day:
+   ```python
+   # Formula: rt = ln(Pt / Pt-1)
+   df['returns'] = np.log(df['close_price'] / df['close_price'].shift(1))
+   ```
+   - Log returns are preferred over simple returns because they are:
+     - Time-additive (can sum across periods)
+     - More symmetric for price changes
+     - Normally distributed (better for statistical analysis)
+
+3. **Calculate daily volatility** using realized volatility formula:
+   ```python
+   # From fetch_historical_prices.py (lines 156-161)
+   T = len(returns)
+   mean_return = returns.mean()
+
+   # Exact formula: σ_daily = √(1/(T-1) · Σ(rt - r̄)²)
+   daily_volatility_manual = np.sqrt(((returns - mean_return) ** 2).sum() / (T - 1))
+   daily_volatility = returns.std()  # pandas uses ddof=1, matches formula
+   ```
+   - `T` = number of observations (89 returns from 90 prices)
+   - `rt` = log return at time t
+   - `r̄` = mean of all log returns
+   - `(T-1)` = degrees of freedom correction (Bessel's correction)
+
+4. **Annualize the volatility** (optional, for easier interpretation):
+   ```python
+   # Formula: σ_annual = σ_daily · √365
+   annualized_volatility = daily_volatility * np.sqrt(365)
+   annualized_volatility_pct = annualized_volatility * 100
+   ```
+
+**Mathematical notation:**
+
 ```
+σ_daily = √[ 1/(T-1) · Σ(rt - r̄)² ]
+
+where:
+  rt = ln(Pt / Pt-1)  [log return at time t]
+  r̄ = (1/T) · Σ rt     [mean return]
+  T = number of returns
+```
+
+**Why this method?**
+- **Historical/Realized volatility**: Based on actual observed price movements
+- **Standard deviation**: Measures dispersion of returns around the mean
+- **Sample correction (T-1)**: Unbiased estimator for sample variance
+- **Log returns**: Better statistical properties than arithmetic returns
+- **90-day window**: Captures current market regime without dilution from distant past
+
+**Results stored in database:**
+```sql
+SELECT symbol, daily_volatility, annualized_volatility_pct, days_analyzed
+FROM asset_volatility
+ORDER BY annualized_volatility_pct DESC;
+```
+
+Example output:
+- **AAVE**: 93.45% annualized (highly volatile)
+- **WETH**: 67.32% annualized (volatile)
+- **USDC**: 0.15% annualized (stable)
+
+**Covariance matrix:**
+
+We also calculate the covariance matrix to capture correlation between assets:
+```python
+# From fetch_historical_prices.py (lines 219-222)
+returns_df = pd.DataFrame(returns_dict)  # Each column = asset returns
+cov_matrix = returns_df.cov()            # Σ = Cov(r)
+corr_matrix = returns_df.corr()          # Normalized correlations
+```
+
+This matrix is essential for **portfolio-level risk calculations** in Monte Carlo simulation, as it captures how assets move together (e.g., WETH and weETH have 0.9997 correlation).
 
 ## Configuration
 
