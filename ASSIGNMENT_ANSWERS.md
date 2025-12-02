@@ -123,7 +123,7 @@ The assignment asks for "top 1,000 borrow positions" which could mean:
 
 **Files Generated**:
 - `top_1000_borrowed_users.csv` - User-level aggregate metrics
-- `top1000_borrowed_positions.csv` - Individual position details
+- `top_1000_borrowed_positions.csv` - Individual position details
 
 ---
 
