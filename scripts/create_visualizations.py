@@ -17,7 +17,13 @@ import psycopg2
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Project paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+VIZ_DIR = os.path.join(PROJECT_ROOT, 'visualizations')
+
+load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
 
 # Set style
 sns.set_style("whitegrid")
@@ -48,7 +54,7 @@ class VaRVisualizer:
         self.cursor = self.conn.cursor()
 
         # Load simulation results
-        self.results_df = pd.read_csv('var_simulation_results.csv')
+        self.results_df = pd.read_csv(os.path.join(DATA_DIR, 'var_simulation_results.csv'))
         self.bad_debt = self.results_df['bad_debt_usd'].values
 
         # Calculate VaR metrics
@@ -290,8 +296,9 @@ class VaRVisualizer:
         ax10.set_title('Summary Statistics', fontsize=14, fontweight='bold', pad=20)
 
         plt.tight_layout()
-        plt.savefig('var_comprehensive_dashboard.png', dpi=300, bbox_inches='tight')
-        print("Created: var_comprehensive_dashboard.png")
+        save_path = os.path.join(VIZ_DIR, 'var_comprehensive_dashboard.png')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Created: {save_path}")
         plt.close()
 
     def create_hf_stress_analysis(self):
@@ -391,8 +398,9 @@ class VaRVisualizer:
         ax3.grid(True, alpha=0.3, axis='y')
 
         plt.tight_layout()
-        plt.savefig('var_hf_stress_analysis.png', dpi=300, bbox_inches='tight')
-        print("Created: var_hf_stress_analysis.png")
+        save_path = os.path.join(VIZ_DIR, 'var_hf_stress_analysis.png')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Created: {save_path}")
         plt.close()
 
     def create_concentration_analysis(self):
@@ -491,8 +499,9 @@ class VaRVisualizer:
         ax.set_title('Key Risk Metrics', fontsize=12, fontweight='bold', pad=20)
 
         plt.tight_layout()
-        plt.savefig('var_concentration_analysis.png', dpi=300, bbox_inches='tight')
-        print("Created: var_concentration_analysis.png")
+        save_path = os.path.join(VIZ_DIR, 'var_concentration_analysis.png')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Created: {save_path}")
         plt.close()
 
     def create_asset_composition_chart(self):
@@ -568,8 +577,9 @@ class VaRVisualizer:
                       fontsize=13, fontweight='bold', pad=20)
 
         plt.tight_layout()
-        plt.savefig('asset_composition_supplied_vs_borrowed.png', dpi=300, bbox_inches='tight')
-        print("Created: asset_composition_supplied_vs_borrowed.png")
+        save_path = os.path.join(VIZ_DIR, 'asset_composition_supplied_vs_borrowed.png')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Created: {save_path}")
         plt.close()
 
     def run_all(self):

@@ -3,7 +3,11 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Project paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 def create_database():
     """Create the database if it doesn't exist"""

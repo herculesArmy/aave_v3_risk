@@ -12,7 +12,13 @@ from typing import Dict, List, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
-load_dotenv()
+# Project paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
+VIZ_DIR = os.path.join(PROJECT_ROOT, 'visualizations')
+
+load_dotenv(os.path.join(PROJECT_ROOT, '.env'))
 
 class AaveVaRSimulation:
     """
@@ -376,8 +382,10 @@ class AaveVaRSimulation:
 
         return metrics
 
-    def plot_results(self, save_path: str = 'var_analysis.png'):
+    def plot_results(self, save_path: str = None):
         """Generate comprehensive visualization of simulation results."""
+        if save_path is None:
+            save_path = os.path.join(VIZ_DIR, 'var_analysis.png')
         print(f"\nGenerating visualizations...")
 
         losses = self.simulation_results
@@ -474,8 +482,10 @@ class AaveVaRSimulation:
 
         return fig
 
-    def export_results(self, output_path: str = 'var_simulation_results.csv'):
+    def export_results(self, output_path: str = None):
         """Export simulation results to CSV."""
+        if output_path is None:
+            output_path = os.path.join(DATA_DIR, 'var_simulation_results.csv')
         print(f"\nExporting results...")
 
         df = pd.DataFrame({

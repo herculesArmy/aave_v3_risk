@@ -6,7 +6,11 @@ from decimal import Decimal
 from tqdm import tqdm
 import pandas as pd
 
-load_dotenv()
+# Project paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 def update_prices_in_database():
     """Fetch current prices and update all positions in the database"""
