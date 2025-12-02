@@ -120,6 +120,47 @@ def create_tables():
         )
     """)
 
+    # Create simulation_runs table for tracking MC simulations
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS simulation_runs (
+            run_id SERIAL PRIMARY KEY,
+            n_scenarios INTEGER NOT NULL,
+            random_seed INTEGER,
+            run_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            var_95 DECIMAL(20, 2),
+            var_99 DECIMAL(20, 2),
+            var_99_9 DECIMAL(20, 2),
+            mean_bad_debt DECIMAL(20, 2),
+            std_bad_debt DECIMAL(20, 2)
+        )
+    """)
+
+    # Create simulated_prices table for storing price trajectories
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS simulated_prices (
+            id SERIAL PRIMARY KEY,
+            run_id INTEGER REFERENCES simulation_runs(run_id) ON DELETE CASCADE,
+            scenario_id INTEGER NOT NULL,
+            asset_symbol VARCHAR(20) NOT NULL,
+            current_price DECIMAL(20, 8),
+            simulated_price DECIMAL(20, 8),
+            return_pct DECIMAL(10, 6),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create scenario_results table for storing bad debt per scenario
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scenario_results (
+            id SERIAL PRIMARY KEY,
+            run_id INTEGER REFERENCES simulation_runs(run_id) ON DELETE CASCADE,
+            scenario_id INTEGER NOT NULL,
+            total_bad_debt DECIMAL(20, 2),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(run_id, scenario_id)
+        )
+    """)
+
     # Create indexes for better query performance
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_users_debt
@@ -144,6 +185,26 @@ def create_tables():
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_historical_prices_date
         ON historical_prices(date DESC)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_simulated_prices_scenario
+        ON simulated_prices(run_id, scenario_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_simulated_prices_asset
+        ON simulated_prices(asset_symbol)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_scenario_results_run
+        ON scenario_results(run_id)
+    """)
+
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_scenario_results_bad_debt
+        ON scenario_results(total_bad_debt DESC)
     """)
 
     conn.commit()

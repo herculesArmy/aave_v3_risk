@@ -16,17 +16,37 @@ class HistoricalPriceFetcher:
         self.base_url = "https://api.coingecko.com/api/v3"
 
         # Mapping of Aave symbols to CoinGecko IDs
+        # Comprehensive list including LSTs, LRTs, and other DeFi assets
         self.asset_mapping = {
+            # Major ETH assets
             'WETH': 'weth',
             'weETH': 'wrapped-eeth',
             'wstETH': 'wrapped-steth',
+            # Restaked/Liquid Restaking Tokens (LRTs)
+            'rsETH': 'kelp-dao-restaked-eth',
+            'ezETH': 'renzo-restaked-eth',
+            'osETH': 'stakewise-v3-oseth',
+            'ETHx': 'stader-ethx',
+            'tETH': 'treehouse-eth',
+            # BTC assets
             'WBTC': 'wrapped-bitcoin',
             'cbBTC': 'coinbase-wrapped-btc',
-            'USDe': 'ethena-usde',
+            'LBTC': 'lombard-staked-btc',
+            'FBTC': 'ignition-fbtc',
+            'eBTC': 'ether-fi-staked-btc',
+            # Stablecoins
             'USDC': 'usd-coin',
             'USDT': 'tether',
             'PYUSD': 'paypal-usd',
+            'USDe': 'ethena-usde',
+            'sUSDe': 'ethena-staked-usde',
+            'crvUSD': 'crvusd',
+            'sDAI': 'savings-dai',
+            # DeFi tokens
             'AAVE': 'aave',
+            'FXS': 'frax-share',
+            'KNC': 'kyber-network-crystal',
+            'XAUt': 'tether-gold',
         }
 
         # Database connection
