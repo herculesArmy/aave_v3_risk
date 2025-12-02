@@ -86,7 +86,7 @@ The assignment asks for "top 1,000 borrow positions" which could mean:
 **We implemented BOTH approaches:**
 
 **Approach 1: Top 1,000 Individual Debt Positions**
-- Export: `top1000_borrowed_positions.csv`
+- Export: `data/top_1000_borrowed_positions.csv`
 - Contains exactly 1,000 individual debt positions
 - Sorted by `amount_usd` (position size)
 - Represents 917 unique users
@@ -122,8 +122,8 @@ The assignment asks for "top 1,000 borrow positions" which could mean:
 **Storage**: PostgreSQL database with 9 tables (see `DATABASE_SCHEMA.md` for complete schema)
 
 **Files Generated**:
-- `top_1000_borrowed_users.csv` - User-level aggregate metrics
-- `top_1000_borrowed_positions.csv` - Individual position details
+- `data/top_1000_borrowed_users.csv` - User-level aggregate metrics
+- `data/top_1000_borrowed_positions.csv` - Individual position details
 
 ---
 
@@ -149,7 +149,7 @@ Based on total collateral value from the top 1,000 borrowers:
 
 **Visual Breakdown:**
 
-![Asset Composition - Supplied vs Borrowed](./asset_composition_supplied_vs_borrowed.png)
+![Asset Composition - Supplied vs Borrowed](../visualizations/asset_composition_supplied_vs_borrowed.png)
 
 **Key Observations from Asset Composition:**
 
@@ -246,7 +246,7 @@ Correlation = Cov(r_asset1, r_asset2) / (σ_asset1 × σ_asset2)
 | WBTC ↔ WETH | 0.8789 | Strong (crypto market correlation) |
 | USDC ↔ WETH | 0.0034 | Zero (stablecoin independent) |
 
-**File Generated**: `top10_supplied_assets_volatility.csv`
+**File Generated**: `data/top_10_asset_volatility.csv`
 
 **Why 90 days?**
 - Captures current market regime without dilution from distant past
@@ -333,7 +333,7 @@ Correlation structure preserved ✓
 
 The chart below shows the empirical distribution of simulated 1-day returns across 10,000 scenarios for four key assets:
 
-![Price Shock Distribution](./price_shock_distribution.png)
+![Price Shock Distribution](../visualizations/price_shock_distribution.png)
 
 **Analysis of Simulated Return Distributions:**
 
@@ -540,7 +540,7 @@ Bad Debt = max(0, $1,464M - $1,275M) = **$189M**
 
 The protocol-level bad debt is the sum of individual user contributions. Understanding this distribution reveals concentration risk:
 
-![User-Level Loss Distribution](./user_level_loss_distribution.png)
+![User-Level Loss Distribution](../visualizations/user_level_loss_distribution.png)
 
 **Analysis of User-Level Contributions:**
 
@@ -645,7 +645,7 @@ This is only **$12M higher** than VaR(99%), indicating limited tail divergence w
 
 The chart below shows the complete risk profile across 7 dimensions:
 
-![VaR Comprehensive Dashboard](./var_comprehensive_dashboard.png)
+![VaR Comprehensive Dashboard](../visualizations/var_comprehensive_dashboard.png)
 
 **Key Insights from Dashboard**:
 
@@ -740,7 +740,7 @@ Single-point-of-failure risk: Top user alone represents **6.5%** of total protoc
 
 #### Concentration Risk Visualization
 
-![Concentration Analysis](./var_concentration_analysis.png)
+![Concentration Analysis](../visualizations/var_concentration_analysis.png)
 
 **Analysis of Concentration Charts**:
 
@@ -796,7 +796,7 @@ This indicates that leverage is high but NOT exponentially explosive within the 
 
 Understanding how Health Factors transition under stress reveals the protocol's vulnerability to cascade liquidations:
 
-![Health Factor Stress & Liquidation Cascade](./hf_stress_liquidation_cascade.png)
+![Health Factor Stress & Liquidation Cascade](../visualizations/hf_stress_liquidation_cascade.png)
 
 **Analysis of Stress Test Results:**
 
@@ -1018,10 +1018,10 @@ These second-order effects are NOT captured in the simple Monte Carlo model, sug
 ### Code Implementation
 
 **Key Files**:
-- `fetch_aave_positions_final.py` (18KB) - Data fetching from The Graph
-- `fetch_historical_prices.py` (13KB) - CoinGecko data + volatility/covariance
-- `monte_carlo_simulation.py` (23KB) - Main simulation engine (10,000 scenarios)
-- `create_enhanced_visualizations.py` (14KB) - Generate risk charts
+- `scripts/fetch_aave_positions_final.py` - Data fetching from The Graph
+- `scripts/fetch_historical_prices.py` - CoinGecko data + volatility/covariance
+- `scripts/monte_carlo_simulation.py` - Main simulation engine (10,000 scenarios)
+- `scripts/create_visualizations.py` - Generate risk charts
 
 **Database**: PostgreSQL with 9 tables (see `DATABASE_SCHEMA.md` for complete schema)
 

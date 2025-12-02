@@ -356,24 +356,24 @@ ORDER BY correlation DESC;
 ## Data Pipeline
 
 ```
-1. FETCH POSITIONS (fetch_aave_positions_final.py)
+1. FETCH POSITIONS (scripts/fetch_aave_positions_final.py)
    └─▶ users, positions, asset_prices
 
-2. FETCH PRICES (fetch_historical_prices.py)
+2. FETCH PRICES (scripts/fetch_historical_prices.py)
    └─▶ historical_prices
    └─▶ asset_volatility
    └─▶ asset_covariance
 
-3. RUN SIMULATION (monte_carlo_simulation.py)
+3. RUN SIMULATION (scripts/monte_carlo_simulation.py)
    └─▶ simulation_runs
    └─▶ scenario_results
    └─▶ simulated_prices
 
-4. VISUALIZE (create_visualizations.py)
-   └─▶ var_comprehensive_dashboard.png
-   └─▶ var_hf_stress_analysis.png
-   └─▶ var_concentration_analysis.png
-   └─▶ asset_composition_supplied_vs_borrowed.png
+4. VISUALIZE (scripts/create_visualizations.py)
+   └─▶ visualizations/var_comprehensive_dashboard.png
+   └─▶ visualizations/var_hf_stress_analysis.png
+   └─▶ visualizations/var_concentration_analysis.png
+   └─▶ visualizations/asset_composition_supplied_vs_borrowed.png
 ```
 
 ---
