@@ -59,6 +59,7 @@ class AaveVaRSimulation:
         self.covariance_matrix = None
         self.asset_symbols = []
         self.simulation_results = None
+        self.emode_categories = {}  # E-Mode ID -> {label, ltv, lt, bonus}
 
     def load_data(self):
         """Load all required data from database."""
@@ -66,6 +67,7 @@ class AaveVaRSimulation:
         print("LOADING DATA FROM DATABASE")
         print(f"{'='*80}\n")
 
+        self._load_emode_categories()
         self._load_users_and_positions()
         self._load_current_prices()
         self._load_covariance_matrix()
@@ -73,15 +75,37 @@ class AaveVaRSimulation:
         print(f"✓ Data loading complete")
         print(f"  - Users: {len(self.users)}")
         print(f"  - Assets: {len(self.asset_symbols)}")
+        print(f"  - E-Mode categories: {len(self.emode_categories)}")
         print(f"  - Covariance matrix: {len(self.asset_symbols)}×{len(self.asset_symbols)}")
+
+    def _load_emode_categories(self):
+        """Load E-Mode categories from database."""
+        cursor = self.db_conn.cursor()
+
+        cursor.execute("""
+            SELECT id, label, ltv, liquidation_threshold, liquidation_bonus
+            FROM emode_categories
+        """)
+
+        for row in cursor.fetchall():
+            emode_id, label, ltv, lt, bonus = row
+            self.emode_categories[emode_id] = {
+                'label': label,
+                'ltv': float(ltv) if ltv else 0.0,
+                'lt': float(lt) if lt else 0.0,
+                'bonus': float(bonus) if bonus else 0.0
+            }
+
+        cursor.close()
+        print(f"✓ Loaded {len(self.emode_categories)} E-Mode categories")
 
     def _load_users_and_positions(self):
         """Load user positions from database."""
         cursor = self.db_conn.cursor()
 
-        # Get top 1000 borrowers
+        # Get top 1000 borrowers with their E-Mode category
         cursor.execute("""
-            SELECT user_address, total_debt_usd, total_collateral_usd, health_factor
+            SELECT user_address, total_debt_usd, total_collateral_usd, health_factor, user_emode_category
             FROM users
             WHERE total_debt_usd > 0
             ORDER BY total_debt_usd DESC
@@ -91,7 +115,7 @@ class AaveVaRSimulation:
         top_users = cursor.fetchall()
         print(f"Loading positions for {len(top_users)} users...")
 
-        for user_address, total_debt, total_collateral, health_factor in top_users:
+        for user_address, total_debt, total_collateral, health_factor, user_emode in top_users:
             # Get all positions for this user
             cursor.execute("""
                 SELECT
@@ -132,7 +156,8 @@ class AaveVaRSimulation:
                 'debt': debt_positions,
                 'total_debt_usd': float(total_debt),
                 'total_collateral_usd': float(total_collateral),
-                'health_factor': float(health_factor) if health_factor else 0.0
+                'health_factor': float(health_factor) if health_factor else 0.0,
+                'user_emode_category': int(user_emode) if user_emode else 0
             })
 
         cursor.close()
@@ -241,6 +266,9 @@ class AaveVaRSimulation:
         """
         Calculate bad debt for a single user under simulated prices.
 
+        Uses the user's E-Mode liquidation threshold if they are in an E-Mode,
+        otherwise uses the base liquidation threshold from the position.
+
         Args:
             user: User dictionary with collateral and debt positions
             simulated_prices: Dictionary mapping symbol -> simulated price
@@ -248,6 +276,12 @@ class AaveVaRSimulation:
         Returns:
             Bad debt amount (0 if user remains solvent)
         """
+        # Get user's E-Mode LT (if in E-Mode)
+        user_emode = user.get('user_emode_category', 0)
+        emode_lt = None
+        if user_emode > 0 and user_emode in self.emode_categories:
+            emode_lt = self.emode_categories[user_emode]['lt']
+
         # Calculate total debt value at simulated prices
         total_debt = 0.0
         for debt_pos in user['debt']:
@@ -258,7 +292,7 @@ class AaveVaRSimulation:
 
         # Calculate recoverable collateral value
         # Only count collateral where usage_as_collateral_enabled = True
-        # Weight by liquidation threshold
+        # Weight by liquidation threshold (E-Mode LT if user is in E-Mode, else base LT)
         recoverable_collateral = 0.0
         for coll_pos in user['collateral']:
             # Check if this collateral is enabled
@@ -267,8 +301,13 @@ class AaveVaRSimulation:
 
             symbol = coll_pos['symbol']
             amount = coll_pos['amount']
-            lt = coll_pos['liquidation_threshold']
             price = simulated_prices.get(symbol, self.asset_prices.get(symbol, 0))
+
+            # Use E-Mode LT if user is in E-Mode, otherwise use base LT
+            if emode_lt is not None:
+                lt = emode_lt
+            else:
+                lt = coll_pos['liquidation_threshold']
 
             # Recoverable value = amount × price × liquidation_threshold
             recoverable_collateral += amount * price * lt

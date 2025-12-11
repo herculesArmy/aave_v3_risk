@@ -53,6 +53,19 @@ def create_tables():
             total_debt_usd DECIMAL(20, 2),
             total_collateral_usd DECIMAL(20, 2),
             health_factor DECIMAL(10, 4),
+            user_emode_category INTEGER DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Create emode_categories table for E-Mode lookup
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS emode_categories (
+            id INTEGER PRIMARY KEY,
+            label VARCHAR(100),
+            ltv DECIMAL(5, 4),
+            liquidation_threshold DECIMAL(5, 4),
+            liquidation_bonus DECIMAL(5, 4),
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)

@@ -16,7 +16,7 @@ This repository implements a full-stack risk analysis pipeline:
 4. **VaR Calculation**: Measure protocol-level bad debt risk
 5. **Visualization**: Generate comprehensive risk dashboards
 
-**Key Result**: 99% VaR = **$1.43 billion** (6.09% of total collateral)
+**Key Result**: 99% VaR = **$24.4 million** (0.10% of total collateral)
 
 ---
 
@@ -168,23 +168,25 @@ chaos_labs/
 
 | Metric | Value | % of Collateral |
 |--------|-------|----------------|
-| **Mean Bad Debt** | $1,352,047,741 | 5.75% |
-| **95% VaR** | $1,406,009,063 | 5.98% |
-| **99% VaR** | $1,431,782,054 | 6.09% |
-| **99.9% VaR** | $1,459,925,904 | 6.21% |
-| **Expected Shortfall (99%)** | $1,443,693,342 | 6.14% |
-| **Standard Deviation** | $32,759,267 | 0.14% |
+| **Mean Bad Debt** | $15,590,388 | 0.07% |
+| **95% VaR** | $20,519,870 | 0.09% |
+| **99% VaR** | $24,367,280 | 0.10% |
+| **99.9% VaR** | $29,195,377 | 0.12% |
+| **Expected Shortfall (99%)** | $26,528,371 | 0.11% |
+| **Standard Deviation** | $2,140,125 | 0.01% |
 
-**Total Collateral**: $23,517,177,668 (top 1,000 borrowers)
+**Total Collateral**: $23,784,823,137 (top 1,000 borrowers)
 **Total Debt**: $14,810,549,648
-**Assets Tracked**: 24 (with CoinGecko prices)
+**Assets Tracked**: 24 (with CoinGecko + DeFiLlama prices)
+**E-Mode Categories**: 33
 
 ### Key Findings
 
-1. **Modeled Liquidation Shortfall**: $1.35B baseline due to liquidation threshold mechanics
-2. **Tight Distribution**: Low variance due to high ETH/LST correlation (>0.99)
-3. **Concentration Risk**: Top 10 users = ~40% of total exposure
-4. **ETH Dominance**: ~62% of collateral is WETH/weETH/wstETH
+1. **Low Protocol Risk**: 99% VaR is only $24.4M (0.10% of collateral)
+2. **E-Mode Impact**: 318 users (32%) use E-Mode with higher LT (92-95%)
+3. **Tight Distribution**: Low variance due to high ETH/LST correlation (>0.99)
+4. **Concentration Risk**: Top 10 users = ~40% of total exposure
+5. **ETH Dominance**: ~62% of collateral is WETH/weETH/wstETH
 
 **For detailed findings, assumptions, and limitations, see [`docs/ASSIGNMENT_ANSWERS.md`](./docs/ASSIGNMENT_ANSWERS.md)**
 

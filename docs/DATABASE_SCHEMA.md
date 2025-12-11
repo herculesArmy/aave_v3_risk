@@ -6,11 +6,11 @@ Complete reference for all PostgreSQL tables in the Aave V3 risk analysis system
 
 ## Overview
 
-The database contains **9 tables** across three layers:
+The database contains **10 tables** across three layers:
 
 | Layer | Tables | Purpose |
 |-------|--------|---------|
-| **Position Data** | `users`, `positions`, `asset_prices` | Current Aave V3 state |
+| **Position Data** | `users`, `positions`, `asset_prices`, `emode_categories` | Current Aave V3 state |
 | **Risk Metrics** | `historical_prices`, `asset_volatility`, `asset_covariance` | Volatility & correlation |
 | **Simulation** | `simulation_runs`, `scenario_results`, `simulated_prices` | Monte Carlo outputs |
 
@@ -28,20 +28,25 @@ CREATE TABLE users (
     total_debt_usd NUMERIC,
     total_collateral_usd NUMERIC,
     health_factor NUMERIC,
+    user_emode_category INTEGER DEFAULT 0,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
 **Key Fields:**
-- `health_factor` - Liquidation risk: HF < 1.0 = liquidatable
+- `health_factor` - Liquidation risk: HF < 1.0 = liquidatable (calculated using E-Mode LT)
+- `user_emode_category` - User's active E-Mode (0 = none, 1 = ETH correlated, etc.)
 
 **Sample Query:**
 ```sql
-SELECT user_address, total_debt_usd, health_factor
+-- Find underwater users (with E-Mode LT applied)
+SELECT user_address, total_debt_usd, health_factor, user_emode_category
 FROM users
 WHERE health_factor < 1.0
 ORDER BY total_debt_usd DESC;
 ```
+
+**Note**: Only 5 users have HF < 1.0 when E-Mode LT is properly applied.
 
 ---
 
@@ -99,6 +104,42 @@ CREATE TABLE asset_prices (
 **Sample Query:**
 ```sql
 SELECT symbol, price_usd FROM asset_prices WHERE price_usd > 0 ORDER BY price_usd DESC;
+```
+
+---
+
+### `emode_categories` (33 rows)
+
+E-Mode category definitions from Aave V3.
+
+```sql
+CREATE TABLE emode_categories (
+    id INTEGER PRIMARY KEY,
+    label VARCHAR,
+    ltv NUMERIC,
+    liquidation_threshold NUMERIC,
+    liquidation_bonus NUMERIC,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Key Fields:**
+- `liquidation_threshold` - E-Mode LT (e.g., 0.95 = 95% for ETH correlated)
+- `label` - Category name (e.g., "ETH correlated", "sUSDe Stablecoins")
+
+**Sample Query:**
+```sql
+SELECT id, label, liquidation_threshold FROM emode_categories ORDER BY id;
+```
+
+**Common E-Mode Categories:**
+```
+ID  Label                    LT
+1   ETH correlated           95%
+2   sUSDe Stablecoins        92%
+3   rsETH LST main           95%
+22  ezETH/wstETH             95%
+26  weETH/wstETH ETH Corr    95%
 ```
 
 ---
@@ -216,12 +257,12 @@ SELECT run_id, n_scenarios, var_99, mean_bad_debt, run_timestamp
 FROM simulation_runs ORDER BY run_id DESC LIMIT 1;
 ```
 
-**Latest Results:**
+**Latest Results (with E-Mode LT):**
 ```
-run_id: 2
+run_id: 5
 n_scenarios: 10,000
-var_99: $1,431,782,054
-mean_bad_debt: $1,352,047,741
+var_99: $24,367,280
+mean_bad_debt: $15,590,388
 ```
 
 ---
@@ -294,13 +335,14 @@ rsETH:  $2,990 → $3,387 (+12.47%)
 |-------|------|-------------|
 | `users` | 1,000 | Top 1,000 borrowers |
 | `positions` | 3,325 | All positions for top borrowers |
-| `asset_prices` | 57 | Current prices (46 with valid data) |
+| `asset_prices` | 57 | Current prices (CoinGecko + DeFiLlama) |
+| `emode_categories` | 33 | E-Mode category definitions |
 | `historical_prices` | 2,170 | 90 days × 24 assets |
 | `asset_volatility` | 24 | Volatility metrics per asset |
 | `asset_covariance` | 576 | 24×24 correlation matrix |
-| `simulation_runs` | 3 | Simulation metadata |
-| `scenario_results` | 30,000 | 10,000 scenarios × 3 runs |
-| `simulated_prices` | 580,000 | All price trajectories |
+| `simulation_runs` | 5 | Simulation metadata |
+| `scenario_results` | 50,000 | 10,000 scenarios × 5 runs |
+| `simulated_prices` | ~1.2M | All price trajectories |
 
 ---
 
@@ -357,7 +399,10 @@ ORDER BY correlation DESC;
 
 ```
 1. FETCH POSITIONS (scripts/fetch_aave_positions_final.py)
-   └─▶ users, positions, asset_prices
+   └─▶ users (with user_emode_category)
+   └─▶ positions
+   └─▶ asset_prices (CoinGecko + DeFiLlama fallback)
+   └─▶ emode_categories (33 E-Mode definitions)
 
 2. FETCH PRICES (scripts/fetch_historical_prices.py)
    └─▶ historical_prices
@@ -366,7 +411,7 @@ ORDER BY correlation DESC;
 
 3. RUN SIMULATION (scripts/monte_carlo_simulation.py)
    └─▶ simulation_runs
-   └─▶ scenario_results
+   └─▶ scenario_results (uses E-Mode LT for HF calculation)
    └─▶ simulated_prices
 
 4. VISUALIZE (scripts/create_visualizations.py)
@@ -391,6 +436,7 @@ psql -h localhost -U postgres -d aave_positions \
 
 ---
 
-**Last Updated**: December 2, 2025
-**Assets Tracked**: 24 (with CoinGecko prices)
+**Last Updated**: December 12, 2025
+**Assets Tracked**: 24 (with CoinGecko + DeFiLlama prices)
 **Simulation**: 10,000 scenarios × 1,000 users
+**E-Mode Categories**: 33 (fetched from The Graph)

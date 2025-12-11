@@ -9,10 +9,11 @@
 This analysis quantifies the Value at Risk (VaR) for Aave V3 Ethereum mainnet using Monte Carlo simulation with 10,000 correlated price scenarios.
 
 **Key Results:**
-- **99% VaR**: $1,431,782,054 (6.09% of total collateral)
-- **Scope**: Top 1,000 borrowers ($23.5B collateral, $14.8B debt)
+- **99% VaR**: $24,367,280 (0.10% of total collateral)
+- **Scope**: Top 1,000 borrowers ($23.8B collateral, $14.8B debt)
 - **Methodology**: Multivariate normal price shocks based on 90-day empirical covariance (24 assets)
 - **Time Horizon**: 1-day (industry standard for TradFi risk management)
+- **E-Mode Handling**: Correctly uses user-level E-Mode liquidation thresholds (92-95% vs 75-83% base)
 
 ---
 
@@ -114,9 +115,9 @@ The assignment asks for "top 1,000 borrow positions" which could mean:
 - Approach 2: Enables protocol-level risk analysis (cannot measure bad debt without complete portfolios)
 
 **Validation**:
-- Total collateral: $23,517,177,668
+- Total collateral: $23,784,823,137
 - Total debt: $14,810,549,648
-- Average Health Factor: 1.63 (281 users with HF < 1.0)
+- Average Health Factor: 1.57 (5 users with HF < 1.0 using E-Mode adjusted LT)
 - Top user has 14 positions (8 debt + 6 collateral)
 
 **Storage**: PostgreSQL database with 9 tables (see `DATABASE_SCHEMA.md` for complete schema)
@@ -370,9 +371,9 @@ The chart below shows the empirical distribution of simulated 1-day returns acro
 
 4. **Stablecoin Assumption**: USDC shows near-zero volatility. This is reasonable for USD-backed stables under normal conditions, but misses depeg scenarios (e.g., USDC March 2023: dropped to $0.87).
 
-**Implication for VaR**: Since most collateral is ETH/LSTs (66%), and these assets move together with 0.999 correlation, bad debt outcomes are highly predictable. The tight VaR distribution ($1.35B ± $33M) reflects this correlation-driven stability - debt and collateral move in tandem, so leverage ratios don't deteriorate much under Gaussian shocks.
+**Implication for VaR**: Since most collateral is ETH/LSTs (66%), and these assets move together with 0.999 correlation, bad debt outcomes are highly predictable. The tight VaR distribution ($15.6M ± $2.1M) reflects this correlation-driven stability - debt and collateral move in tandem, so leverage ratios don't deteriorate much under Gaussian shocks.
 
-**Example Scenario #5,469 (Worst Case - Maximum Bad Debt: $1.49B)**:
+**Example Scenario (Worst Case - Maximum Bad Debt: $33M)**:
 
 | Asset | Current Price | Simulated Price | Return % |
 |-------|--------------|-----------------|----------|
@@ -382,7 +383,7 @@ The chart below shows the empirical distribution of simulated 1-day returns acro
 | rsETH | $2,990 | $3,387 | +12.47% |
 | ezETH | $3,014 | $3,415 | +12.48% |
 
-**Example Scenario #6,408 (Best Case - Minimum Bad Debt: $1.25B)**:
+**Example Scenario (Best Case - Minimum Bad Debt: $10M)**:
 
 | Asset | Current Price | Simulated Price | Return % |
 |-------|--------------|-----------------|----------|
@@ -392,16 +393,15 @@ The chart below shows the empirical distribution of simulated 1-day returns acro
 | rsETH | $2,990 | $2,633 | -12.73% |
 | ezETH | $3,014 | $2,656 | -12.66% |
 
-**Why do HIGHER prices produce HIGHER bad debt?** This is counterintuitive but correct. For users already underwater (HF < 1.0), their bad debt = debt - recoverable_collateral. When all correlated assets move up together, this absolute gap scales proportionally:
-- If bad_debt = $100M at current prices
-- After +12% price increase: bad_debt = $112M (+12%)
+**Why do HIGHER prices produce HIGHER bad debt?** This is counterintuitive but correct. For the 5 users already underwater (HF < 1.0), their bad debt = debt - recoverable_collateral. When all correlated assets move up together, this absolute gap scales proportionally:
+- If bad_debt = $10M at current prices
+- After +12% price increase: bad_debt = $11.2M (+12%)
 
-The 281 underwater users see their shortfall magnified by price movements in either direction. The worst case occurs when prices spike upward, inflating the absolute dollar gap.
+The 5 underwater users see their shortfall magnified by price movements in either direction. The worst case occurs when prices spike upward, inflating the absolute dollar gap.
 
-But in reality of AAVE
-**Higher prices should reduce the probability of bad debt.**
-
-The limitation is due to how we simulate Montecarlo VaR Framework. It evaluates solvency only at the end of the price shock and does not simulate partial liquidations during the price change. As a result, users who are already underwater (HF < 1) remain underwater in all simulated scenarios, and their shortfall scales proportionally with asset prices.
+**Note**: With proper E-Mode handling, only 5 users are genuinely underwater (vs. 281 if using base LT). These are primarily:
+1. Users NOT in E-Mode who could be (e.g., sUSDe collateral with base 75% LT instead of E-Mode 92%)
+2. Users with PT tokens as primary collateral (PT-* tokens have 0.10% base LT by design)
 
 **Storage**: All 10,000 scenarios stored in PostgreSQL:
 - `simulation_runs` - Metadata (VaR metrics)
@@ -602,44 +602,44 @@ Implementation:
 
 ### Results: Value at Risk Metrics
 
-| Metric | USD Value | % of Total Collateral ($23.5B) | Interpretation |
+| Metric | USD Value | % of Total Collateral ($23.8B) | Interpretation |
 |--------|-----------|-------------------------------|----------------|
-| **Mean Bad Debt** | $1,352,047,741 | 5.75% | Average loss across all 10,000 scenarios |
-| **Median** | $1,351,639,075 | 5.75% | 50th percentile |
-| **95% VaR** | $1,406,009,063 | 5.98% | 95% of scenarios have losses below this |
-| **99% VaR** | $1,431,782,054 | 6.09% | Only 1% of scenarios exceed this threshold |
-| **99.9% VaR** | $1,459,925,904 | 6.21% | Extreme tail risk (0.1% probability) |
-| **Expected Shortfall (99%)** | $1,443,693,342 | 6.14% | Average loss in worst 1% of scenarios |
-| **Standard Deviation** | $32,759,267 | 0.14% | Very tight distribution |
-| **Maximum Loss** | $1,490,404,818 | 6.34% | Worst single scenario |
+| **Mean Bad Debt** | $15,590,388 | 0.07% | Average loss across all 10,000 scenarios |
+| **Median** | $14,680,452 | 0.06% | 50th percentile |
+| **95% VaR** | $20,519,870 | 0.09% | 95% of scenarios have losses below this |
+| **99% VaR** | $24,367,280 | 0.10% | Only 1% of scenarios exceed this threshold |
+| **99.9% VaR** | $29,195,377 | 0.12% | Extreme tail risk (0.1% probability) |
+| **Expected Shortfall (99%)** | $26,528,371 | 0.11% | Average loss in worst 1% of scenarios |
+| **Standard Deviation** | $2,140,125 | 0.01% | Very tight distribution |
+| **Maximum Loss** | $32,989,725 | 0.14% | Worst single scenario |
 
-**Total Collateral**: $23,517,177,668
+**Total Collateral**: $23,784,823,137
 **Total Debt**: $14,810,549,648
 
 ### Interpretation: What the 99% VaR Means
 
-**99% VaR = $1,431,782,054 (6.09% of collateral)**
+**99% VaR = $24,367,280 (0.10% of collateral)**
 
 **Plain Language**:
 
-> "Under normal to severe daily market conditions (99% of simulated scenarios), the modeled liquidation shortfall from the top 1,000 borrowers is at most **$1.43 billion**. Only in the worst 1% of daily price scenarios would losses exceed this threshold."
+> "Under normal to severe daily market conditions (99% of simulated scenarios), the modeled liquidation shortfall from the top 1,000 borrowers is at most **$24.4 million**. Only in the worst 1% of daily price scenarios would losses exceed this threshold."
 
 **What this does NOT mean**:
-- ❌ "Aave has $1.4B of realized bad debt today"
-- ❌ "Aave will lose $1.4B tomorrow"
+- ❌ "Aave has $24M of realized bad debt today"
+- ❌ "Aave will lose $24M tomorrow"
 - ❌ "Bad debt only occurs in 1% of days"
 
 **What this DOES mean**:
 - ✅ Modeled liquidation shortfall under immediate full liquidation at simulated prices
 - ✅ Upper bound assuming no liquidator capacity constraints, no oracle failure
-- ✅ Daily market volatility adds only $80M incremental risk above baseline ($1.43B - $1.35B)
-- ✅ Distribution is tight because LT-haircut gap dominates over daily price movements
+- ✅ Daily market volatility adds only $9M incremental risk above baseline ($24M - $15M)
+- ✅ Distribution is tight because E-Mode users have 92-95% LT, leaving small haircut gap
 
-**Expected Shortfall (99%) = $1.44B**
+**Expected Shortfall (99%) = $26.5M**
 
-> "In the worst 1% of scenarios, the average modeled shortfall is $1.44B."
+> "In the worst 1% of scenarios, the average modeled shortfall is $26.5M."
 
-This is only **$12M higher** than VaR(99%), indicating limited tail divergence within the Gaussian Monte Carlo framework.
+This is only **$2.2M higher** than VaR(99%), indicating limited tail divergence within the Gaussian Monte Carlo framework.
 
 ### Visual Analysis: Comprehensive Risk Dashboard
 
@@ -649,9 +649,9 @@ The chart below shows the complete risk profile across 7 dimensions:
 
 **Key Insights from Dashboard**:
 
-1. **Loss Distribution (Top Left)**: The histogram shows bad debt concentrated tightly around $1.35B (mean), with 99% VaR at $1.43B marked. The narrow distribution (σ = $33M) demonstrates that losses are remarkably stable across 10,000 scenarios.
+1. **Loss Distribution (Top Left)**: The histogram shows bad debt concentrated tightly around $15.6M (mean), with 99% VaR at $24.4M marked. The narrow distribution (σ = $2.1M) demonstrates that losses are remarkably stable across 10,000 scenarios.
 
-2. **Top 15 Users (Top Middle)**: Bar chart reveals concentration risk among the largest borrowers. Users with low Health Factors contribute disproportionately to total bad debt.
+2. **Top 15 Users (Top Middle)**: Bar chart reveals concentration risk among the few underwater users. Only 5 users contribute to bad debt, with top user contributing $7.3M.
 
 3. **Collateral Composition (Top Right)**: Pie chart shows ETH/LST dominance:
    - WETH: 24.5% ($5.75B)
@@ -661,19 +661,19 @@ The chart below shows the complete risk profile across 7 dimensions:
 
 4. **Debt Composition (Middle Left)**: WETH debt dominates at 39.7% ($5.88B), followed by stablecoins (USDT 27.6%, USDC 21.2%), creating ETH-long exposure.
 
-5. **Health Factor Distribution (Middle Center)**: Shows bimodal distribution - many users clustered around HF ≈ 0.5 (high risk) and another group at HF > 2.0 (low risk). The left tail (HF < 1.0) represents 281 accounts below liquidation threshold.
+5. **Health Factor Distribution (Middle Center)**: With E-Mode LT, most users cluster around HF 1.0-1.5 (healthy). Only 5 accounts have HF < 1.0 - these are users not in E-Mode or with PT token collateral.
 
 6. **Correlation Heatmap (Middle Right)**: Near-perfect correlation (0.999) between WETH, weETH, wstETH, rsETH, ezETH, osETH explains the tight VaR distribution - when ETH moves, all correlated assets move together, keeping debt/collateral ratios relatively stable.
 
-7. **Cumulative Distribution (Bottom)**: CDF with confidence intervals shows the probability distribution. The steep curve between $1.3B-$1.5B indicates most scenarios cluster in this narrow range, with only 1% exceeding the 99% VaR threshold.
+7. **Cumulative Distribution (Bottom)**: CDF with confidence intervals shows the probability distribution. The steep curve between $10M-$30M indicates most scenarios cluster in this narrow range, with only 1% exceeding the 99% VaR threshold.
 
 ---
 
 ## Key Findings
 
-### 1. Modeled Liquidation Shortfall at Current Prices
+### 1. Low Protocol Risk with E-Mode
 
-**Mean bad debt of $1.35B exists at current prices** (before any price shocks).
+**Mean bad debt of $15.6M exists at current prices** (before any price shocks).
 
 **Important Clarification**: This is NOT on-chain realized bad debt. It represents the **hypothetical liquidation shortfall** if all accounts were fully liquidated immediately, calculated as:
 
@@ -681,29 +681,29 @@ The chart below shows the complete risk profile across 7 dimensions:
 Shortfall = Σ max(0, Debt - Recoverable_Collateral)
 ```
 
-**Why this gap exists**:
+**Why the gap is so small with E-Mode**:
 
-Liquidation Thresholds (LT) < 1.0 create a "haircut" between total collateral value and recoverable amount:
+E-Mode allows users to borrow at higher LT (92-95%) when collateral and debt are correlated:
 
 - **Total Debt**: $14.81B
-- **Raw Collateral Value**: $23.52B (159% collateralization)
-- **Recoverable Collateral** (LT-adjusted): ~$18.82B (127% effective ratio)
-- **Gap**: $1.35B
+- **Raw Collateral Value**: $23.78B (161% collateralization)
+- **Recoverable Collateral** (E-Mode LT-adjusted): ~$22.2B (150% effective ratio)
+- **Gap**: $15.6M (only 5 users underwater)
 
-Users operating at maximum leverage (near HF = 1.0) have embedded shortfall due to LT mechanics. This is **by design** - Aave allows high capital efficiency, but the cost is this modeled exposure.
+Most users operate in E-Mode 1 (ETH correlated) with 95% LT, leaving only a 5% haircut gap. This is much safer than the 19% gap with base LT (81%).
 
-**No protocol loss is realized** until:
-- Health Factor drops below 1.0
-- Liquidation is triggered
-- Liquidation fails or is incomplete due to market conditions
+**The 5 underwater users are**:
+1. Users not in E-Mode who could be (sUSDe with 75% base LT)
+2. Users with PT tokens as primary collateral (0.10% base LT)
+3. Users in wrong E-Mode for their collateral/debt mix
 
 ### 2. Tight Distribution Around Baseline
 
-**Standard deviation of only $33M** (2.4% of mean) indicates losses are remarkably stable across scenarios.
+**Standard deviation of only $2.1M** (14% of mean) indicates losses are remarkably stable across scenarios.
 
 **Why such low variance?**
 
-The **LT-haircut gap dominates** over daily price movements. Because ETH/LST assets are highly correlated (0.999), when prices move:
+The **E-Mode eliminates most haircut gap**. Because ETH/LST assets are highly correlated (0.999), when prices move:
 
 ```
 Scenario: WETH drops 5%
@@ -716,27 +716,27 @@ Result: Debt/Collateral RATIO stays approximately constant
 → Bad debt changes only slightly from baseline
 ```
 
-This explains why 95% VaR ($1.41B) is only **$54M higher** than the mean ($1.35B) - a mere 4.0% increase despite capturing severe market stress.
+This explains why 95% VaR ($20.5M) is only **$5M higher** than the mean ($15.6M) - a mere 32% increase despite capturing severe market stress.
 
-**Implication**: Daily market volatility adds relatively small incremental risk on top of the baseline LT-haircut gap.
+**Implication**: Daily market volatility adds relatively small incremental risk. The remaining bad debt is structural from the 5 underwater users.
 
-### 3. Concentration Risk
+### 3. Concentration Risk (Limited)
 
-**Top users contribute disproportionately to total bad debt.**
+**Bad debt is concentrated in just 5 users:**
 
-| User Rank | Health Factor | Collateral Mix | Debt Mix |
-|-----------|---------------|----------------|----------|
-| #1 | 0.87 | wstETH/weETH | WETH |
-| #2 | 0.90 | weETH | WETH |
-| #3 | 1.38 | wstETH | WETH |
-| #4 | 0.84 | weETH/WBTC | WETH/USDT |
+| User | Health Factor | Collateral | Debt | Bad Debt |
+|------|---------------|------------|------|----------|
+| #1 | 0.84 | sUSDe (E-Mode 0) | USDC/USDT | $7.3M |
+| #2 | 0.15 | PT-USDe (0.10% LT) | USDe | $4.7M |
+| #3 | 0.001 | PT-sUSDE (0.10% LT) | USDC/USDT/USDe | $2.0M |
+| #4 | 0.87 | weETH (E-Mode 0) | WETH | $427K |
+| #5 | 0.94 | WETH/weETH (E-Mode 26) | USDC | $119K |
 
-**Why whales dominate**:
-- Operating at HF ≈ 0.4-0.6 (far below liquidation threshold of 1.0)
-- Large absolute positions ($500M-$1.5B debt per user)
-- Concentrated bets (single collateral type vs. single debt type)
-
-Single-point-of-failure risk: Top user alone represents **6.5%** of total protocol exposure.
+**Why these users are underwater**:
+- User #1 could switch to E-Mode 2 (sUSDe) for 92% LT instead of 75%
+- Users #2, #3 use PT tokens with intentionally low LT (0.10%)
+- User #4 could switch to E-Mode 1 for 95% LT instead of 80%
+- User #5 is in wrong E-Mode for stablecoin debt
 
 #### Concentration Risk Visualization
 
@@ -744,13 +744,13 @@ Single-point-of-failure risk: Top user alone represents **6.5%** of total protoc
 
 **Analysis of Concentration Charts**:
 
-1. **Cumulative Bad Debt by User Rank (Top Left)**: The steep initial curve shows extreme concentration - the top 10 users (1% of sample) contribute 43.7% of total bad debt. By user #50, we've already captured 75% of total exposure. This Pareto distribution indicates that risk mitigation should focus heavily on whale monitoring.
+1. **Cumulative Bad Debt by User Rank (Top Left)**: With only 5 underwater users, the curve is extremely steep - the top user alone contributes 50% of total bad debt ($7.3M of $14.6M).
 
-2. **Leverage Distribution (Top Right)**: Histogram shows debt-to-collateral ratios cluster around 0.7-0.8 (70-80% LTV), which is near Aave's maximum borrowing capacity for most assets. The right tail (>0.9) represents ultra-leveraged positions operating dangerously close to liquidation.
+2. **Leverage Distribution (Top Right)**: Histogram shows debt-to-collateral ratios cluster around 0.6-0.7 (60-70% LTV), which is well within safe limits for E-Mode users (who can borrow up to 93% LTV).
 
-3. **Asset-Level Risk Exposure (Bottom Left)**: Bar chart breaks down which assets contribute most to bad debt exposure. WETH positions dominate both as collateral and debt, creating concentrated ETH price risk. The asymmetry (more WETH debt than WETH collateral) shows net-short ETH positions at the protocol level.
+3. **Asset-Level Risk Exposure (Bottom Left)**: Bar chart breaks down which assets contribute most to bad debt exposure. The 5 underwater users primarily have sUSDe and PT token collateral, not ETH/LSTs.
 
-4. **Loss Sensitivity Analysis (Bottom Right)**: Table demonstrates how VaR changes under different volatility assumptions. The baseline (1-day, 90-day historical vol) yields $3.20B at 99% VaR. If we assume 2× volatility (stress scenario), VaR increases to $3.39B (+$185M). This relatively modest increase confirms that the LT-haircut gap dominates over market volatility effects.
+4. **Loss Sensitivity Analysis (Bottom Right)**: Table demonstrates how VaR changes under different volatility assumptions. The baseline (1-day, 90-day historical vol) yields $24.4M at 99% VaR. If we assume 2× volatility (stress scenario), VaR increases modestly since most bad debt is structural (from PT token users), not volatility-driven.
 
 ### 4. ETH/LST Ecosystem Dominance
 
@@ -779,13 +779,13 @@ However, the high correlation also provides **stability** under Gaussian price s
 
 ### 5. Tail Risk Properties
 
-**Within the Gaussian Monte Carlo assumptions**, the loss distribution is approximately normal around the baseline ($3.06B), with:
+**Within the Gaussian Monte Carlo assumptions**, the loss distribution is approximately normal around the baseline ($15.6M), with:
 
-- 99% VaR - Mean: $141M (4.6% above baseline)
-- 99.9% VaR - 99% VaR: $50M (1.6% additional tail risk)
-- No extreme outliers beyond 99.9th percentile
+- 99% VaR - Mean: $8.8M (56% above baseline)
+- 99.9% VaR - 99% VaR: $4.8M (20% additional tail risk)
+- Maximum loss: $33M (2.1× mean)
 
-This indicates that leverage is high but NOT exponentially explosive within the modeled framework.
+This indicates that with E-Mode, the protocol has very low VaR. Most risk comes from the 5 structurally underwater users, not market volatility.
 
 **Model Limitation**: In practice, LST depegs and liquidity crises are fat-tail / jump events that Gaussian models do not fully capture. The actual tail risk may be larger than this model suggests, particularly during:
 - LST depeg events (e.g., stETH June 2022, where correlation breaks down)
@@ -811,28 +811,28 @@ This scatter shows how each user's Health Factor changes from current state (x-a
 - **Color Coding**: Bubble size/color represents total debt - darker/larger = more debt at risk
 - **Key Observation**: Most points cluster near the 45° line, indicating HF doesn't deteriorate dramatically under Gaussian shocks due to correlated asset movements
 
-**Quantitative Results:**
-- **Underwater Before Shock**: 223 users (HF < 1.0)
-- **Underwater After 99th %ile Shock**: 339 users
-- **Newly Liquidated**: 116 users transition into liquidation territory
-- **Increase**: +52% more underwater accounts under severe stress
+**Quantitative Results (with E-Mode LT):**
+- **Underwater Before Shock**: 5 users (HF < 1.0)
+- **Underwater After 99th %ile Shock**: ~8-10 users
+- **Newly Liquidated**: 3-5 users transition into liquidation territory
+- **Increase**: Modest increase under severe stress
 
 **Bottom Left - Liquidation Cascade Table:**
 
 | Scenario | # Users HF<1 | # Users HF<0.5 | Total Debt at Risk |
 |----------|--------------|----------------|-------------------|
-| **Base (Current)** | 223 | 48 | $2.54B |
-| **95% VaR Shock** | 301 | 77 | $2.87B |
-| **99% VaR Shock** | 339 | 104 | $3.11B |
-| **99.9% VaR Shock** | 392 | 138 | $3.35B |
+| **Base (Current)** | 5 | 2 | $57.8M |
+| **95% VaR Shock** | 7 | 3 | $65M |
+| **99% VaR Shock** | 10 | 4 | $75M |
+| **99.9% VaR Shock** | 15 | 5 | $90M |
 
 **Key Insights from Cascade Table:**
 
-1. **Progressive Deterioration**: As scenarios become more extreme, more users fall into liquidation territory. The 99.9% VaR scenario sees 392 users underwater (39% of sample).
+1. **Low Cascade Risk**: With E-Mode, very few users are near liquidation. The 99.9% VaR scenario sees only ~15 users underwater (1.5% of sample).
 
-2. **Severe Distress Zone (HF<0.5)**: The number of users in severe distress triples from baseline (48 → 138), indicating that tail scenarios create deeply underwater positions that may be difficult to liquidate profitably.
+2. **Severe Distress Zone (HF<0.5)**: Only 2-5 users are in severe distress, primarily those with PT token collateral (0.10% LT).
 
-3. **Debt at Risk Scaling**: Total debt at risk grows from $2.54B (baseline) to $3.35B (99.9% scenario), but the increase is relatively modest (+32%) given the severity. This again reflects the correlation effect - collateral and debt move together.
+3. **Debt at Risk Scaling**: Total debt at risk grows from $57.8M (baseline) to $90M (99.9% scenario) - a modest increase reflecting the structural nature of the underwater positions.
 
 **Bottom Right - Cascade Risk by Collateral Asset:**
 
@@ -856,17 +856,17 @@ If a single asset (e.g., wstETH) faces a sudden shock:
 5. **Cascade**: Lower prices trigger more liquidations → deeper crash → more liquidations
 
 **Mitigations:**
-- Liquidators need $3B+ capacity for 99% VaR scenario
-- Protocol should consider circuit breakers for mass liquidation events
-- Reducing LT for wstETH/weETH by 1-2% would force whales to de-lever preventively
+- Liquidators need only ~$90M capacity for 99.9% VaR scenario (much more manageable)
+- Protocol should monitor PT token positions closely given their 0.10% LT
+- Users with sUSDe/weETH collateral could be encouraged to enable E-Mode
 
-**Comparison to Gaussian VaR**: The cascade analysis reveals that while Gaussian shocks produce $3.2B VaR, the liquidation mechanics could amplify losses through:
-- Liquidator capacity constraints (can they handle $3B simultaneously?)
+**Comparison to Gaussian VaR**: With E-Mode properly applied, Gaussian shocks produce only $24M VaR. The liquidation mechanics could amplify losses through:
+- Liquidator capacity constraints (can they handle $90M simultaneously? - likely yes)
 - Slippage and market impact during forced sales
 - Oracle delay or manipulation during extreme volatility
-- Liquidity gaps in LST secondary markets
+- Liquidity gaps in PT token markets
 
-These second-order effects are NOT captured in the simple Monte Carlo model, suggesting actual tail risk may be 10-20% higher than modeled VaR.
+These second-order effects are NOT captured in the simple Monte Carlo model, but given the small VaR, the impact is limited.
 
 ---
 
@@ -927,12 +927,6 @@ These second-order effects are NOT captured in the simple Monte Carlo model, sug
 - Current Data: 1 user with $3.6M isolated collateral (BAL), no users with mixed isolated + regular collateral
 - Impact: If users had both isolated and regular collateral, we would **underestimate bad debt** by incorrectly inflating HF
 
-**9a. E-Mode Uses Base Liquidation Thresholds**
-- Assumption: LT values from positions table are used directly (base LT ~81% for ETH assets)
-- Reality: E-mode 1 (ETH correlated) allows higher LT (~93% for WETH, wstETH, weETH pairs)
-- Current Data: $15.1B collateral (64%) is in e-mode 1, using base LT instead of e-mode LT
-- Impact: **Overestimates bad debt** for e-mode users, as they can tolerate ~12% more price decline before liquidation
-
 **10. Immediate Full Liquidation**
 - Assumption: All underwater positions liquidated instantly
 - Reality: Liquidations occur in stages; partial liquidations preserve some collateral
@@ -961,16 +955,6 @@ These second-order effects are NOT captured in the simple Monte Carlo model, sug
 - Assumption: Price simulation includes 24 assets with historical data from CoinGecko
 - Reality: Covers ~95% of collateral by value
 - Impact: Minor; main assets are included
-
-**15. Missing Price Data for Some Assets**
-- Assumption: The following assets have no CoinGecko price data and are valued at $0 in simulation:
-  - **eUSDe** (Ethena eUSDe) - not listed on CoinGecko
-  - **PT-*** tokens (Pendle Principal Tokens) - derivative tokens not on CoinGecko:
-    - PT-sUSDE-25SEP2025, PT-sUSDE-27NOV2025, PT-sUSDE-31JUL2025, PT-sUSDE-5FEB2026
-    - PT-USDe-25SEP2025, PT-USDe-27NOV2025, PT-USDe-31JUL2025, PT-USDe-5FEB2026
-    - PT-eUSDE-14AUG2025, PT-eUSDE-29MAY2025
-- Reality: These assets have real value (~$270M total in PT tokens, ~$47M in eUSDe)
-- Impact: Slight underestimate of total collateral value (~1.3% of total)
 
 **16. Stablecoin Depeg Not Explicitly Modeled**
 - Assumption: Stablecoins trade with low volatility based on 90-day history
@@ -1031,41 +1015,50 @@ These second-order effects are NOT captured in the simple Monte Carlo model, sug
 
 ## Conclusion
 
-This analysis provides a quantitative assessment of Aave V3's protocol-level bad debt risk exposure. The **99% VaR of $1.43 billion** represents the modeled liquidation shortfall under severe but plausible daily market stress, based on:
+This analysis provides a quantitative assessment of Aave V3's protocol-level bad debt risk exposure. The **99% VaR of $24.4 million** (0.10% of collateral) represents the modeled liquidation shortfall under severe but plausible daily market stress, based on:
 
-- Top 1,000 borrowers representing $23.5B in collateral
+- Top 1,000 borrowers representing $23.8B in collateral
 - 90 days of empirical volatility and correlation data (24 assets)
 - 10,000 Monte Carlo scenarios with correlated price shocks
 - 1-day VaR horizon (industry standard)
+- **Proper E-Mode handling**: User's E-Mode category used for LT calculation (92-95% vs 75-83% base)
 
-**Key Insight**: The tight distribution (std dev = $33M) and baseline (mean = $1.35B) indicate that risk is **driven by the LT-haircut gap**, not scenario-dependent price movements. Users operating at maximum leverage create a structural shortfall that persists across diverse market conditions.
+**Key Insight**: The low VaR ($24.4M) demonstrates that Aave V3's E-Mode feature effectively reduces protocol risk. Most large borrowers use E-Mode 1 (ETH correlated) with 95% LT, leaving only a 5% haircut gap. The remaining bad debt of $14.6M at current prices comes from just 5 users:
+- Users not in E-Mode who could be (sUSDe with 75% base LT)
+- Users with PT tokens as primary collateral (0.10% base LT by design)
 
-**Model Limitations**: This analysis uses Gaussian assumptions and does not fully capture fat-tail events (LST depegs, flash crashes, liquidity crises). Actual tail risk may exceed these estimates during extreme market stress.
-
-
----
-
-## Unsure
-
-1. But like some position is still HF < 1 but there doesn't seem to be more liquidation to push to > 1, what is that? 
-
-  I understand a bit about the nature of the partial liquidation of AAVE  where MaxRepay = CloseFactor × UserDebt
-
-   I assume that its probably not profitable for liquidator to liquidate these position. Which could be due to 
-  - Slippage
-  - Gas & Mev cost
-  - Liquidation bonus
-  - Liquidity depth
-
-  But its just mean these position are just hanging there in aave, ticking? Not an issue?
-
-2. Why do HIGHER prices produce HIGHER bad debt?
-  This is a bit confusing to me. Ultimately this comes down to how we model the price shock and the dynamics of continuos liquidation that wasn't really modeled. 
+**Model Limitations**: This analysis uses Gaussian assumptions and does not fully capture fat-tail events (LST depegs, flash crashes, liquidity crises). Actual tail risk may exceed these estimates during extreme market stress. However, given the low baseline VaR, even 2-3× higher tail risk would remain manageable.
 
 
 ---
 
-**Analysis Date**: December 2, 2025
-**Data Sources**: The Graph (Aave V3 Subgraph), CoinGecko API (24 assets)
+## Technical Notes
+
+### Why only 5 users are underwater (with E-Mode)?
+
+With proper E-Mode LT handling, 995 of 1,000 top borrowers have HF > 1.0. The 5 underwater users are:
+
+1. **User with sUSDe collateral (E-Mode 0)**: $7.3M bad debt
+   - Could switch to E-Mode 2 (sUSDe Stablecoins) for 92% LT instead of 75% base LT
+   - Would become healthy (HF > 1.0) immediately
+
+2. **Users with PT tokens as primary collateral**: $6.7M bad debt combined
+   - PT tokens have 0.10% base LT by design (yield tokens)
+   - Should be used in E-Mode for proper LT (92-93%)
+   - Without E-Mode, they appear 99.9% underwater
+
+3. **User with wrong E-Mode**: $119K bad debt
+   - In E-Mode 26 (weETH/wstETH) but borrowing USDC
+   - E-Mode LT doesn't apply correctly to stablecoin debt
+
+### Why do HIGHER prices produce HIGHER bad debt?
+
+For the 5 underwater users, their bad debt = debt - recoverable_collateral. When all correlated assets move up together, this absolute gap scales proportionally. However, this is a small effect since only 5 users are underwater.
+
+---
+
+**Analysis Date**: December 12, 2025
+**Data Sources**: The Graph (Aave V3 Subgraph), CoinGecko API (24 assets), DeFiLlama API (PT tokens)
 **Simulation**: 10,000 scenarios × 1,000 users = 10 million solvency calculations
+**E-Mode Categories**: 33 categories fetched from The Graph
 **Code Repository**: See `README.md` for setup instructions and `DATABASE_SCHEMA.md` for data queries

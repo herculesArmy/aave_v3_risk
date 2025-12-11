@@ -210,10 +210,10 @@ class AavePositionFetcherFinal:
 
     def enrich_with_prices(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add USD prices and calculate USD amounts"""
-        print("\nFetching prices from CoinGecko...")
+        print("\nFetching prices from CoinGecko (with DeFiLlama fallback for PT-* tokens)...")
 
         unique_symbols = df['symbol'].unique().tolist()
-        prices = self.price_fetcher.get_prices_batch(unique_symbols)
+        prices = self.price_fetcher.get_prices_batch_with_fallback(unique_symbols)
 
         # Store price timestamp
         price_timestamp = datetime.now()
@@ -245,8 +245,15 @@ class AavePositionFetcherFinal:
         return top_borrowers
 
     def calculate_user_metrics(self, df: pd.DataFrame, top_borrowers: pd.DataFrame) -> pd.DataFrame:
-        """Calculate full metrics for top borrowers"""
-        print("\nCalculating user metrics (with proper collateral filtering)...")
+        """Calculate full metrics for top borrowers using E-Mode LT when applicable"""
+        print("\nCalculating user metrics (with E-Mode LT adjustments)...")
+
+        # Load E-Mode categories from database
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT id, liquidation_threshold FROM emode_categories")
+        emode_lts = {row[0]: float(row[1]) for row in cursor.fetchall()}
+        cursor.close()
+        print(f"Loaded {len(emode_lts)} E-Mode categories for HF calculation")
 
         metrics = []
 
@@ -254,9 +261,23 @@ class AavePositionFetcherFinal:
             user_address = row['user_address']
             user_positions = df[df['user_address'] == user_address]
 
+            # Get user's e-mode category (from positions data)
+            user_emode = 0
+            if 'user_emode_category' in user_positions.columns:
+                user_emode_values = user_positions['user_emode_category'].dropna().unique()
+                if len(user_emode_values) > 0:
+                    user_emode = int(user_emode_values[0])
+
             collateral = user_positions[user_positions['side'] == 'collateral'].copy()
-            collateral['weighted_collateral'] = collateral['amount_usd'] * collateral['liquidation_threshold']
             total_collateral_usd = collateral['amount_usd'].sum()
+
+            # Calculate weighted collateral using E-Mode LT if user is in E-Mode
+            if user_emode > 0 and user_emode in emode_lts:
+                emode_lt = emode_lts[user_emode]
+                collateral['weighted_collateral'] = collateral['amount_usd'] * emode_lt
+            else:
+                collateral['weighted_collateral'] = collateral['amount_usd'] * collateral['liquidation_threshold']
+
             weighted_collateral_usd = collateral['weighted_collateral'].sum()
 
             total_debt_usd = row['total_debt_usd']
@@ -270,7 +291,8 @@ class AavePositionFetcherFinal:
                 'user_address': user_address,
                 'total_debt_usd': total_debt_usd,
                 'total_collateral_usd': total_collateral_usd,
-                'health_factor': health_factor
+                'health_factor': health_factor,
+                'user_emode_category': user_emode
             })
 
         return pd.DataFrame(metrics)
@@ -301,14 +323,16 @@ class AavePositionFetcherFinal:
         self.db_conn.commit()
 
         for _, row in tqdm(user_metrics.iterrows(), total=len(user_metrics)):
+            user_emode = int(row.get('user_emode_category', 0))
             cursor.execute("""
-                INSERT INTO users (user_address, total_debt_usd, total_collateral_usd, health_factor, last_updated)
-                VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                INSERT INTO users (user_address, total_debt_usd, total_collateral_usd, health_factor, user_emode_category, last_updated)
+                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """, (
                 row['user_address'],
                 Decimal(str(row['total_debt_usd'])),
                 Decimal(str(row['total_collateral_usd'])),
-                Decimal(str(min(row['health_factor'], 999999)))
+                Decimal(str(min(row['health_factor'], 999999))),
+                user_emode
             ))
 
         self.db_conn.commit()
@@ -381,9 +405,69 @@ class AavePositionFetcherFinal:
         self.db_conn.commit()
         cursor.close()
 
+    def fetch_emode_categories(self):
+        """Fetch all E-Mode categories from The Graph and store in database"""
+        print("\nFetching E-Mode categories from The Graph...")
+
+        query = """
+        {
+          emodeCategories(first: 100) {
+            id
+            ltv
+            liquidationThreshold
+            liquidationBonus
+            label
+          }
+        }
+        """
+
+        response = requests.post(
+            self.subgraph_url,
+            json={'query': query},
+            headers={'Content-Type': 'application/json'}
+        )
+
+        data = response.json()
+        if 'errors' in data:
+            print(f"Warning: Could not fetch E-Mode categories: {data['errors']}")
+            return
+
+        categories = data['data']['emodeCategories']
+        print(f"Found {len(categories)} E-Mode categories")
+
+        cursor = self.db_conn.cursor()
+
+        # Clear and re-populate
+        cursor.execute("DELETE FROM emode_categories")
+
+        for cat in categories:
+            cursor.execute("""
+                INSERT INTO emode_categories (id, label, ltv, liquidation_threshold, liquidation_bonus, last_updated)
+                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (id) DO UPDATE SET
+                    label = EXCLUDED.label,
+                    ltv = EXCLUDED.ltv,
+                    liquidation_threshold = EXCLUDED.liquidation_threshold,
+                    liquidation_bonus = EXCLUDED.liquidation_bonus,
+                    last_updated = CURRENT_TIMESTAMP
+            """, (
+                int(cat['id']),
+                cat.get('label', ''),
+                Decimal(str(int(cat['ltv']) / 10000)) if cat['ltv'] else Decimal('0'),
+                Decimal(str(int(cat['liquidationThreshold']) / 10000)) if cat['liquidationThreshold'] else Decimal('0'),
+                Decimal(str(int(cat['liquidationBonus']) / 10000)) if cat['liquidationBonus'] else Decimal('0')
+            ))
+
+        self.db_conn.commit()
+        cursor.close()
+        print(f"✓ Stored {len(categories)} E-Mode categories")
+
     def run(self):
         """Main execution flow"""
         try:
+            # Fetch E-Mode categories first
+            self.fetch_emode_categories()
+
             positions_df = self.fetch_all_user_positions()
 
             if positions_df.empty:
