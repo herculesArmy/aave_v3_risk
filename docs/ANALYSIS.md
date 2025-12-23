@@ -1,6 +1,6 @@
 # Aave V3 Protocol Value at Risk Analysis
 
-**Assignment Submission - Comprehensive Risk Assessment**
+**Analysis - Comprehensive Risk Assessment**
 
 ---
 
@@ -951,11 +951,6 @@ These second-order effects are NOT captured in the simple Monte Carlo model, but
 - Reality: Long tail of smaller borrowers not modeled
 - Impact: Understates total protocol risk, but top 1,000 represent 80%+ of exposure
 
-**14. 24 Assets with CoinGecko Prices**
-- Assumption: Price simulation includes 24 assets with historical data from CoinGecko
-- Reality: Covers ~95% of collateral by value
-- Impact: Minor; main assets are included
-
 **16. Stablecoin Depeg Not Explicitly Modeled**
 - Assumption: Stablecoins trade with low volatility based on 90-day history
 - Reality: Structural depegs (e.g., USDC March 2023) are rare but catastrophic
@@ -1023,41 +1018,13 @@ This analysis provides a quantitative assessment of Aave V3's protocol-level bad
 - 1-day VaR horizon (industry standard)
 - **Proper E-Mode handling**: User's E-Mode category used for LT calculation (92-95% vs 75-83% base)
 
-**Key Insight**: The low VaR ($24.4M) demonstrates that Aave V3's E-Mode feature effectively reduces protocol risk. Most large borrowers use E-Mode 1 (ETH correlated) with 95% LT, leaving only a 5% haircut gap. The remaining bad debt of $14.6M at current prices comes from just 5 users:
-- Users not in E-Mode who could be (sUSDe with 75% base LT)
-- Users with PT tokens as primary collateral (0.10% base LT by design)
+**Key Insight**: The low VaR ($24.4M) demonstrates that Aave V3's E-Mode feature effectively reduces protocol risk. Most large borrowers use E-Mode 1 (ETH correlated) with 95% LT, leaving only a 5% haircut gap. The remaining bad debt of ~$15M at current prices comes from users not in E-Mode or with PT tokens as primary collateral.
 
 **Model Limitations**: This analysis uses Gaussian assumptions and does not fully capture fat-tail events (LST depegs, flash crashes, liquidity crises). Actual tail risk may exceed these estimates during extreme market stress. However, given the low baseline VaR, even 2-3× higher tail risk would remain manageable.
 
-
 ---
 
-## Technical Notes
-
-### Why only 5 users are underwater (with E-Mode)?
-
-With proper E-Mode LT handling, 995 of 1,000 top borrowers have HF > 1.0. The 5 underwater users are:
-
-1. **User with sUSDe collateral (E-Mode 0)**: $7.3M bad debt
-   - Could switch to E-Mode 2 (sUSDe Stablecoins) for 92% LT instead of 75% base LT
-   - Would become healthy (HF > 1.0) immediately
-
-2. **Users with PT tokens as primary collateral**: $6.7M bad debt combined
-   - PT tokens have 0.10% base LT by design (yield tokens)
-   - Should be used in E-Mode for proper LT (92-93%)
-   - Without E-Mode, they appear 99.9% underwater
-
-3. **User with wrong E-Mode**: $119K bad debt
-   - In E-Mode 26 (weETH/wstETH) but borrowing USDC
-   - E-Mode LT doesn't apply correctly to stablecoin debt
-
-### Why do HIGHER prices produce HIGHER bad debt?
-
-For the 5 underwater users, their bad debt = debt - recoverable_collateral. When all correlated assets move up together, this absolute gap scales proportionally. However, this is a small effect since only 5 users are underwater.
-
----
-
-**Analysis Date**: December 12, 2025
+**Analysis Date**: December 16, 2025
 **Data Sources**: The Graph (Aave V3 Subgraph), CoinGecko API (24 assets), DeFiLlama API (PT tokens)
 **Simulation**: 10,000 scenarios × 1,000 users = 10 million solvency calculations
 **E-Mode Categories**: 33 categories fetched from The Graph
